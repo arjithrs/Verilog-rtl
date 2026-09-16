@@ -1,4 +1,4 @@
-module full_adder (
+module tt_um_full_adder (
     input  wire a,
     input  wire b,
     input  wire cin,
