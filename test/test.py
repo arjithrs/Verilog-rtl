@@ -1,40 +1,89 @@
-# SPDX-FileCopyrightText: © 2024 Tiny Tapeout
-# SPDX-License-Identifier: Apache-2.0
+`timescale 1ns / 1ps
 
-import cocotb
-from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles
+module tb_tt_fulladder;
 
+    // Inputs to DUT (reg)
+    reg  [7:0] ui_in;
+    reg  [7:0] uio_in;
+    reg        ena;
+    reg        clk;
+    reg        rst_n;
 
-@cocotb.test()
-async def test_project(dut):
-    dut._log.info("Start")
+    // Outputs from DUT (wire)
+    wire [7:0] uo_out;
+    wire [7:0] uio_out;
+    wire [7:0] uio_oe;
 
-    # Set the clock period to 10 us (100 KHz)
-    clock = Clock(dut.clk, 10, unit="us")
-    cocotb.start_soon(clock.start())
+    // Instantiate Design Under Test (DUT)
+    tt_fulladder dut (
+        .ui_in  (ui_in),
+        .uo_out (uo_out),
+        .uio_in (uio_in),
+        .uio_out(uio_out),
+        .uio_oe (uio_oe),
+        .ena    (ena),
+        .clk    (clk),
+        .rst_n  (rst_n)
+    );
 
-    # Reset
-    dut._log.info("Reset")
-    dut.ena.value = 1
-    dut.ui_in.value = 0
-    dut.uio_in.value = 0
-    dut.rst_n.value = 0
-    await ClockCycles(dut.clk, 10)
-    dut.rst_n.value = 1
+    // 100 kHz Clock Generation (10 us period)
+    always #5000 clk = ~clk;
 
-    dut._log.info("Test project behavior")
+    // Test stimulus variables
+    integer i;
+    reg a, b, cin;
+    reg expected_sum, expected_cout;
 
-    # Set the input values you want to test
-    dut.ui_in.value = 20
-    dut.uio_in.value = 30
+    initial begin
+        // Waveform dump for GTKWave / EDA Playground
+        $dumpfile("tb.vcd");
+        $dumpvars(0, tb_tt_fulladder);
 
-    # Wait for one clock cycle to see the output values
-    await ClockCycles(dut.clk, 1)
+        // Initialize signals
+        clk   = 0;
+        rst_n = 0;
+        ena   = 1;
+        ui_in = 0;
+        uio_in = 0;
 
-    # The following assersion is just an example of how to check the output values.
-    # Change it to match the actual expected output of your module:
-    assert dut.uo_out.value == 50
+        // Apply reset sequence
+        #20000;
+        rst_n = 1;
+        #10000;
 
-    # Keep testing the module by changing the input values, waiting for
-    # one or more clock cycles, and asserting the expected output values.
+        $display("----------------------------------------------");
+        $display("    FULL ADDER VERILOG TESTBENCH SIMULATION   ");
+        $display("----------------------------------------------");
+
+        // Iterate through all 8 truth table combinations
+        for (i = 0; i < 8; i = i + 1) begin
+            a   = i[0];
+            b   = i[1];
+            cin = i[2];
+
+            // Drive inputs to ui_in[0]=A, ui_in[1]=B, ui_in[2]=Cin
+            ui_in = {5'b00000, cin, b, a};
+
+            #10000; // Wait 1 clock cycle
+
+            // Calculate golden model outputs
+            expected_sum  = a ^ b ^ cin;
+            expected_cout = (a & b) | (b & cin) | (a & cin);
+
+            // Self-checking assertion
+            if ((uo_out[0] === expected_sum) && (uo_out[1] === expected_cout)) begin
+                $display("[PASS] A=%b B=%b Cin=%b | Sum=%b Cout=%b (uo_out=%b)", 
+                         a, b, cin, uo_out[0], uo_out[1], uo_out[1:0]);
+            end else begin
+                $display("[FAIL] A=%b B=%b Cin=%b | Expected: Sum=%b Cout=%b | Got: Sum=%b Cout=%b", 
+                         a, b, cin, expected_sum, expected_cout, uo_out[0], uo_out[1]);
+            end
+        end
+
+        $display("----------------------------------------------");
+        $display("              SIMULATION COMPLETE             ");
+        $display("----------------------------------------------");
+        $finish;
+    end
+
+endmodule
